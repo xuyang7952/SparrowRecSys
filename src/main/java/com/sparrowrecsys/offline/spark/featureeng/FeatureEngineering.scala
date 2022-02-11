@@ -12,17 +12,23 @@ object FeatureEngineering {
   /**
    * One-hot encoding example function
    * @param samples movie samples dataframe
+   * 独热编码的案例
    */
   def oneHotEncoderExample(samples:DataFrame): Unit ={
+    //samples样本集中的每一条数据代表一部电影的信息，其中movieId为电影id
     val samplesWithIdNumber = samples.withColumn("movieIdNumber", col("movieId").cast(sql.types.IntegerType))
 
+    //利用Spark的机器学习库Spark MLlib创建One-hot编码器
     val oneHotEncoder = new OneHotEncoderEstimator()
       .setInputCols(Array("movieIdNumber"))
       .setOutputCols(Array("movieIdVector"))
       .setDropLast(false)
 
+    //训练One-hot编码器，并完成从id特征到One-hot向量的转换
     val oneHotEncoderSamples = oneHotEncoder.fit(samplesWithIdNumber).transform(samplesWithIdNumber)
+    //打印最终样本的数据结构
     oneHotEncoderSamples.printSchema()
+    //打印10条样本查看结果
     oneHotEncoderSamples.show(10)
   }
 
@@ -31,6 +37,7 @@ object FeatureEngineering {
   /**
    * Multi-hot encoding example function
    * @param samples movie samples dataframe
+   * 多热编码的案例
    */
   def multiHotEncoderExample(samples:DataFrame): Unit ={
     val samplesWithGenre = samples.select(col("movieId"), col("title"),explode(split(col("genres"), "\\|").cast("array<string>")).as("genre"))
@@ -57,12 +64,14 @@ object FeatureEngineering {
   /**
    * Process rating samples
    * @param samples rating samples
+   * 评分数据处理，数值类型，归一化和分桶
    */
   def ratingFeatures(samples:DataFrame): Unit ={
     samples.printSchema()
     samples.show(10)
 
     //calculate average movie rating score and rating count
+    //利用打分表ratings计算电影的平均分、被打分次数等数值型特征
     val movieFeatures = samples.groupBy(col("movieId"))
       .agg(count(lit(1)).as("ratingCount"),
         avg(col("rating")).as("avgRating"),
@@ -72,12 +81,14 @@ object FeatureEngineering {
     movieFeatures.show(10)
 
     //bucketing
+    //分桶处理，创建QuantileDiscretizer进行分桶，将打分次数这一特征分到100个桶中
     val ratingCountDiscretizer = new QuantileDiscretizer()
       .setInputCol("ratingCount")
       .setOutputCol("ratingCountBucket")
       .setNumBuckets(100)
 
     //Normalization
+    //归一化处理，创建MinMaxScaler进行归一化，将平均得分进行归一化
     val ratingScaler = new MinMaxScaler()
       .setInputCol("avgRatingVec")
       .setOutputCol("scaleAvgRating")

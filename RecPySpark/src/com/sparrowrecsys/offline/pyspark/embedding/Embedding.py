@@ -32,16 +32,20 @@ class UdfFunction:
 
 def processItemSequence(spark, rawSampleDataPath):
     # rating data
+    # 把原始的rating数据处理成序列数据
     ratingSamples = spark.read.format("csv").option("header", "true").load(rawSampleDataPath)
-    # ratingSamples.show(5)
-    # ratingSamples.printSchema()
+    print(f"ratingSamples--原始数据：")
+    ratingSamples.show(5)
+    ratingSamples.printSchema()
     sortUdf = udf(UdfFunction.sortF, ArrayType(StringType()))
+    # 过滤掉评分在3.5一下的评分记录 按照用户id分组 把所有id连接成一个String，方便后续word2vec模型处理
     userSeq = ratingSamples \
         .where(F.col("rating") >= 3.5) \
         .groupBy("userId") \
         .agg(sortUdf(F.collect_list("movieId"), F.collect_list("timestamp")).alias('movieIds')) \
         .withColumn("movieIdStr", array_join(F.col("movieIds"), " "))
     # userSeq.select("userId", "movieIdStr").show(10, truncate = False)
+    # 把序列数据筛选出来，丢掉其他过程数据
     return userSeq.select('movieIdStr').rdd.map(lambda x: x[0].split(' '))
 
 
@@ -65,12 +69,16 @@ def embeddingLSH(spark, movieEmbMap):
 
 
 def trainItem2vec(spark, samples, embLength, embOutputPath, saveToRedis, redisKeyPrefix):
+    # 设置模型参数
     word2vec = Word2Vec().setVectorSize(embLength).setWindowSize(5).setNumIterations(10)
+    # 训练模型
     model = word2vec.fit(samples)
-    synonyms = model.findSynonyms("158", 20)
+    # 训练结束，用模型查找与item"592"最相似的20个item
+    synonyms = model.findSynonyms("158", 5)
     for synonym, cosineSimilarity in synonyms:
-        print(synonym, cosineSimilarity)
-    embOutputDir = '/'.join(embOutputPath.split('/')[:-1])
+        print("相似的5个",synonym, cosineSimilarity)
+    # 保存模型
+    embOutputDir = '\\'.join(embOutputPath.split('\\')[:-1])
     if not os.path.exists(embOutputDir):
         os.makedirs(embOutputDir)
     with open(embOutputPath, 'w') as f:
@@ -187,15 +195,18 @@ if __name__ == '__main__':
     conf = SparkConf().setAppName('ctrModel').setMaster('local')
     spark = SparkSession.builder.config(conf=conf).getOrCreate()
     # Change to your own filepath
-    file_path = 'file:///home/hadoop/SparrowRecSys/src/main/resources'
-    rawSampleDataPath = file_path + "/webroot/sampledata/ratings.csv"
+    # file_path = 'file:///home/hadoop/SparrowRecSys/src/main/resources'
+    file_path = r'E:\xn_work\xuyang\SparrowRecSys\target\classes'
+    # rawSampleDataPath = file_path + "/webroot/sampledata/ratings.csv"
+    rawSampleDataPath = r"E:\xn_work\xuyang\SparrowRecSys\target\classes\webroot\sampledata\ratings.csv"
     embLength = 10
     samples = processItemSequence(spark, rawSampleDataPath)
+    print(f"samples:{samples}")
     model = trainItem2vec(spark, samples, embLength,
-                          embOutputPath=file_path[7:] + "/webroot/modeldata2/item2vecEmb.csv", saveToRedis=False,
+                          embOutputPath=file_path + r"\webroot\modeldataxuyang\item2vecEmb.csv", saveToRedis=False,
                           redisKeyPrefix="i2vEmb")
-    graphEmb(samples, spark, embLength, embOutputFilename=file_path[7:] + "/webroot/modeldata2/itemGraphEmb.csv",
+    graphEmb(samples, spark, embLength, embOutputFilename=file_path + r"\webroot\modeldataxuyang\itemGraphEmb.csv",
              saveToRedis=True, redisKeyPrefix="graphEmb")
-    generateUserEmb(spark, rawSampleDataPath, model, embLength,
-                    embOutputPath=file_path[7:] + "/webroot/modeldata2/userEmb.csv", saveToRedis=False,
-                    redisKeyPrefix="uEmb")
+    # generateUserEmb(spark, rawSampleDataPath, model, embLength,
+    #                 embOutputPath=file_path[7:] + "/webroot/modeldata2/userEmb.csv", saveToRedis=False,
+    #                 redisKeyPrefix="uEmb")

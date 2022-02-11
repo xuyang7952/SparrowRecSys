@@ -24,13 +24,15 @@ object Embedding {
   val redisEndpoint = "localhost"
   val redisPort = 6379
 
-  def processItemSequence(sparkSession: SparkSession, rawSampleDataPath: String): RDD[Seq[String]] ={
+  def processItemSequence(sparkSession: SparkSession, rawSampleDataPath: String): RDD[Seq[String]] = {
 
     //path of rating data
+    //设定rating数据的路径并用spark载入数据
     val ratingsResourcesPath = this.getClass.getResource(rawSampleDataPath)
     val ratingSamples = sparkSession.read.format("csv").option("header", "true").load(ratingsResourcesPath.getPath)
 
     //sort by timestamp udf
+    //实现一个用户定义的操作函数(UDF)，用于之后的排序
     val sortUdf: UserDefinedFunction = udf((rows: Seq[Row]) => {
       rows.map { case Row(movieId: String, timestamp: String) => (movieId, timestamp) }
         .sortBy { case (_, timestamp) => timestamp }
@@ -40,17 +42,19 @@ object Embedding {
     ratingSamples.printSchema()
 
     //process rating data then generate rating movie sequence data
+    //把原始的rating数据处理成序列数据
     val userSeq = ratingSamples
       .where(col("rating") >= 3.5)
       .groupBy("userId")
       .agg(sortUdf(collect_list(struct("movieId", "timestamp"))) as "movieIds")
       .withColumn("movieIdStr", array_join(col("movieIds"), " "))
 
+    //把序列数据筛选出来，丢掉其他过程数据
     userSeq.select("userId", "movieIdStr").show(10, truncate = false)
     userSeq.select("movieIdStr").rdd.map(r => r.getAs[String]("movieIdStr").split(" ").toSeq)
   }
 
-  def generateUserEmb(sparkSession: SparkSession, rawSampleDataPath: String, word2VecModel: Word2VecModel, embLength:Int, embOutputFilename:String, saveToRedis:Boolean, redisKeyPrefix:String): Unit ={
+  def generateUserEmb(sparkSession: SparkSession, rawSampleDataPath: String, word2VecModel: Word2VecModel, embLength: Int, embOutputFilename: String, saveToRedis: Boolean, redisKeyPrefix: String): Unit = {
     val ratingsResourcesPath = this.getClass.getResource(rawSampleDataPath)
     val ratingSamples = sparkSession.read.format("csv").option("header", "true").load(ratingsResourcesPath.getPath)
     ratingSamples.show(10, false)
@@ -67,15 +71,14 @@ object Embedding {
           val movieId = row.getAs[String]("movieId")
           val movieEmb = word2VecModel.getVectors.get(movieId)
           movieCount += 1
-          if(movieEmb.isDefined){
+          if (movieEmb.isDefined) {
             newEmb.zip(movieEmb.get).map { case (x, y) => x + y }
-          }else{
+          } else {
             newEmb
           }
         }).map((x: Float) => x / movieCount)
-        userEmbeddings.append((userId,userEmb))
+        userEmbeddings.append((userId, userEmb))
       })
-
 
 
     val embFolderPath = this.getClass.getResource("/webroot/modeldata/")
@@ -100,28 +103,33 @@ object Embedding {
     }
   }
 
-  def trainItem2vec(sparkSession: SparkSession, samples : RDD[Seq[String]], embLength:Int, embOutputFilename:String, saveToRedis:Boolean, redisKeyPrefix:String): Word2VecModel = {
+  def trainItem2vec(sparkSession: SparkSession, samples: RDD[Seq[String]], embLength: Int, embOutputFilename: String, saveToRedis: Boolean, redisKeyPrefix: String): Word2VecModel = {
+    //设置模型参数
     val word2vec = new Word2Vec()
       .setVectorSize(embLength)
       .setWindowSize(5)
       .setNumIterations(10)
 
+    //训练模型
     val model = word2vec.fit(samples)
 
-
+    //训练结束，用模型查找与item"592"最相似的20个item
     val synonyms = model.findSynonyms("158", 20)
     for ((synonym, cosineSimilarity) <- synonyms) {
       println(s"$synonym $cosineSimilarity")
     }
 
+    // 保存模型
     val embFolderPath = this.getClass.getResource("/webroot/modeldata/")
     val file = new File(embFolderPath.getPath + embOutputFilename)
     val bw = new BufferedWriter(new FileWriter(file))
+    //用model.getVectors获取所有Embedding向量
     for (movieId <- model.getVectors.keys) {
       bw.write(movieId + ":" + model.getVectors(movieId).mkString(" ") + "\n")
     }
     bw.close()
 
+    // 保存到redis里
     if (saveToRedis) {
       val redisClient = new Jedis(redisEndpoint, redisPort)
       val params = SetParams.setParams()
@@ -137,58 +145,64 @@ object Embedding {
     model
   }
 
-  def oneRandomWalk(transitionMatrix : mutable.Map[String, mutable.Map[String, Double]], itemDistribution : mutable.Map[String, Double], sampleLength:Int): Seq[String] ={
+  def oneRandomWalk(transitionMatrix: mutable.Map[String, mutable.Map[String, Double]], itemDistribution: mutable.Map[String, Double], sampleLength: Int): Seq[String] = {
     val sample = mutable.ListBuffer[String]()
 
     //pick the first element
     val randomDouble = Random.nextDouble()
     var firstItem = ""
-    var accumulateProb:Double = 0D
-    breakable { for ((item, prob) <- itemDistribution) {
-      accumulateProb += prob
-      if (accumulateProb >= randomDouble){
-        firstItem = item
-        break
+    var accumulateProb: Double = 0D
+    breakable {
+      for ((item, prob) <- itemDistribution) {
+        accumulateProb += prob
+        if (accumulateProb >= randomDouble) {
+          firstItem = item
+          break
+        }
       }
-    }}
+    }
 
     sample.append(firstItem)
     var curElement = firstItem
 
-    breakable { for(_ <- 1 until sampleLength) {
-      if (!itemDistribution.contains(curElement) || !transitionMatrix.contains(curElement)){
-        break
-      }
-
-      val probDistribution = transitionMatrix(curElement)
-      val randomDouble = Random.nextDouble()
-      var accumulateProb: Double = 0D
-      breakable { for ((item, prob) <- probDistribution) {
-        accumulateProb += prob
-        if (accumulateProb >= randomDouble){
-          curElement = item
+    breakable {
+      for (_ <- 1 until sampleLength) {
+        if (!itemDistribution.contains(curElement) || !transitionMatrix.contains(curElement)) {
           break
         }
-      }}
-      sample.append(curElement)
-    }}
-    Seq(sample.toList : _*)
+
+        val probDistribution = transitionMatrix(curElement)
+        val randomDouble = Random.nextDouble()
+        var accumulateProb: Double = 0D
+        breakable {
+          for ((item, prob) <- probDistribution) {
+            accumulateProb += prob
+            if (accumulateProb >= randomDouble) {
+              curElement = item
+              break
+            }
+          }
+        }
+        sample.append(curElement)
+      }
+    }
+    Seq(sample.toList: _*)
   }
 
-  def randomWalk(transitionMatrix : mutable.Map[String, mutable.Map[String, Double]], itemDistribution : mutable.Map[String, Double], sampleCount:Int, sampleLength:Int): Seq[Seq[String]] ={
+  def randomWalk(transitionMatrix: mutable.Map[String, mutable.Map[String, Double]], itemDistribution: mutable.Map[String, Double], sampleCount: Int, sampleLength: Int): Seq[Seq[String]] = {
     val samples = mutable.ListBuffer[Seq[String]]()
-    for(_ <- 1 to sampleCount) {
+    for (_ <- 1 to sampleCount) {
       samples.append(oneRandomWalk(transitionMatrix, itemDistribution, sampleLength))
     }
-    Seq(samples.toList : _*)
+    Seq(samples.toList: _*)
   }
 
-  def generateTransitionMatrix(samples : RDD[Seq[String]]): (mutable.Map[String, mutable.Map[String, Double]], mutable.Map[String, Double]) ={
-    val pairSamples = samples.flatMap[(String, String)]( sample => {
-      var pairSeq = Seq[(String,String)]()
-      var previousItem:String = null
-      sample.foreach((element:String) => {
-        if(previousItem != null){
+  def generateTransitionMatrix(samples: RDD[Seq[String]]): (mutable.Map[String, mutable.Map[String, Double]], mutable.Map[String, Double]) = {
+    val pairSamples = samples.flatMap[(String, String)](sample => {
+      var pairSeq = Seq[(String, String)]()
+      var previousItem: String = null
+      sample.foreach((element: String) => {
+        if (previousItem != null) {
           pairSeq = pairSeq :+ (previousItem, element)
         }
         previousItem = element
@@ -201,11 +215,11 @@ object Embedding {
     val transitionCountMatrix = mutable.Map[String, mutable.Map[String, Long]]()
     val itemCountMap = mutable.Map[String, Long]()
 
-    pairCountMap.foreach( pair => {
+    pairCountMap.foreach(pair => {
       val pairItems = pair._1
       val count = pair._2
 
-      if(!transitionCountMatrix.contains(pairItems._1)){
+      if (!transitionCountMatrix.contains(pairItems._1)) {
         transitionCountMatrix(pairItems._1) = mutable.Map[String, Long]()
       }
 
@@ -227,7 +241,7 @@ object Embedding {
     (transitionMatrix, itemDistribution)
   }
 
-  def embeddingLSH(spark:SparkSession, movieEmbMap:Map[String, Array[Float]]): Unit ={
+  def embeddingLSH(spark: SparkSession, movieEmbMap: Map[String, Array[Float]]): Unit = {
 
     val movieEmbSeq = movieEmbMap.toSeq.map(item => (item._1, Vectors.dense(item._2.map(f => f.toDouble))))
     val movieEmbDF = spark.createDataFrame(movieEmbSeq).toDF("movieId", "emb")
@@ -247,11 +261,11 @@ object Embedding {
     embBucketResult.show(10, truncate = false)
 
     println("Approximately searching for 5 nearest neighbors of the sample embedding:")
-    val sampleEmb = Vectors.dense(0.795,0.583,1.120,0.850,0.174,-0.839,-0.0633,0.249,0.673,-0.237)
+    val sampleEmb = Vectors.dense(0.795, 0.583, 1.120, 0.850, 0.174, -0.839, -0.0633, 0.249, 0.673, -0.237)
     bucketModel.approxNearestNeighbors(movieEmbDF, sampleEmb, 5).show(truncate = false)
   }
 
-  def graphEmb(samples : RDD[Seq[String]], sparkSession: SparkSession, embLength:Int, embOutputFilename:String, saveToRedis:Boolean, redisKeyPrefix:String): Word2VecModel ={
+  def graphEmb(samples: RDD[Seq[String]], sparkSession: SparkSession, embLength: Int, embOutputFilename: String, saveToRedis: Boolean, redisKeyPrefix: String): Word2VecModel = {
     val transitionMatrixAndItemDis = generateTransitionMatrix(samples)
 
     println(transitionMatrixAndItemDis._1.size)
@@ -280,7 +294,7 @@ object Embedding {
 
     val samples = processItemSequence(spark, rawSampleDataPath)
     val model = trainItem2vec(spark, samples, embLength, "item2vecEmb.csv", saveToRedis = false, "i2vEmb")
-    //graphEmb(samples, spark, embLength, "itemGraphEmb.csv", saveToRedis = true, "graphEmb")
+    graphEmb(samples, spark, embLength, "itemGraphEmb.csv", saveToRedis = true, "graphEmb")
     //generateUserEmb(spark, rawSampleDataPath, model, embLength, "userEmb.csv", saveToRedis = false, "uEmb")
   }
 }
