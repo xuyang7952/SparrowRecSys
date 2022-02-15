@@ -108,14 +108,17 @@ public class DataManager {
             System.out.println("Loading movie embedding completed. " + validEmbCount + " movie embeddings in total.");
         }else{
             System.out.println("Loading movie embedding from Redis ...");
+            //查询出所有以embKey为前缀的数据
             Set<String> movieEmbKeys = RedisClient.getInstance().keys(embKey + "*");
             int validEmbCount = 0;
+            //遍历查出的key
             for (String movieEmbKey : movieEmbKeys){
                 String movieId = movieEmbKey.split(":")[1];
                 Movie m = getMovieById(Integer.parseInt(movieId));
                 if (null == m) {
                     continue;
                 }
+                //用redisClient的get方法查询出key对应的value，再set到内存中的movie结构中
                 m.setEmb(Utility.parseEmbStr(RedisClient.getInstance().get(movieEmbKey)));
                 validEmbCount++;
             }

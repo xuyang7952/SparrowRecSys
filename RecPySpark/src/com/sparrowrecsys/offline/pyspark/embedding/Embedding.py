@@ -54,15 +54,19 @@ def embeddingLSH(spark, movieEmbMap):
     for key, embedding_list in movieEmbMap.items():
         embedding_list = [np.float64(embedding) for embedding in embedding_list]
         movieEmbSeq.append((key, Vectors.dense(embedding_list)))
+    # 将电影embedding数据转换成dense Vector的形式，便于之后处理
     movieEmbDF = spark.createDataFrame(movieEmbSeq).toDF("movieId", "emb")
+    # 利用Spark MLlib创建LSH分桶模型,BucketLength 指的就是分桶公式中的分桶宽度 w，NumHashTables 指的是多桶策略中的分桶次数
     bucketProjectionLSH = BucketedRandomProjectionLSH(inputCol="emb", outputCol="bucketId", bucketLength=0.1,
-                                                      numHashTables=3)
+                          numHashTables=3) # 3个分桶函数，分桶宽度为0.1
+    #　训练LSH分桶模型　进行分桶
     bucketModel = bucketProjectionLSH.fit(movieEmbDF)
     embBucketResult = bucketModel.transform(movieEmbDF)
     print("movieId, emb, bucketId schema:")
     embBucketResult.printSchema()
     print("movieId, emb, bucketId data result:")
     embBucketResult.show(10, truncate=False)
+    # 尝试对一个示例Embedding查找最近邻
     print("Approximately searching for 5 nearest neighbors of the sample embedding:")
     sampleEmb = Vectors.dense(0.795, 0.583, 1.120, 0.850, 0.174, -0.839, -0.0633, 0.249, 0.673, -0.237)
     bucketModel.approxNearestNeighbors(movieEmbDF, sampleEmb, 5).show(truncate=False)

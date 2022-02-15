@@ -67,6 +67,7 @@ object FeatureEngineering {
    * 评分数据处理，数值类型，归一化和分桶
    */
   def ratingFeatures(samples:DataFrame): Unit ={
+    println("samples--打分数据结构：")
     samples.printSchema()
     samples.show(10)
 
@@ -77,7 +78,7 @@ object FeatureEngineering {
         avg(col("rating")).as("avgRating"),
         variance(col("rating")).as("ratingVar"))
         .withColumn("avgRatingVec", double2vec(col("avgRating")))
-
+    println("movieFeatures--处理后的数据，次数，均值，方差，double2vec：")
     movieFeatures.show(10)
 
     //bucketing
@@ -97,11 +98,15 @@ object FeatureEngineering {
     val featurePipeline = new Pipeline().setStages(pipelineStage)
 
     val movieProcessedFeatures = featurePipeline.fit(movieFeatures).transform(movieFeatures)
+    println("分桶、归一化处理后的数据：次数分100个桶，均分归一化")
     movieProcessedFeatures.show(10)
   }
 
   def main(args: Array[String]): Unit = {
     Logger.getLogger("org").setLevel(Level.ERROR)
+    /*
+    利用spark进行特征处理，独热编码，多热编码，
+     */
 
     val conf = new SparkConf()
       .setMaster("local")
@@ -111,20 +116,19 @@ object FeatureEngineering {
     val spark = SparkSession.builder.config(conf).getOrCreate()
     val movieResourcesPath = this.getClass.getResource("/webroot/sampledata/movies.csv")
     val movieSamples = spark.read.format("csv").option("header", "true").load(movieResourcesPath.getPath)
-    println("Raw Movie Samples:")
+    println("Raw Movie Samples--原始数据:")
     movieSamples.printSchema()
     movieSamples.show(10)
 
-    println("OneHotEncoder Example:")
+    println("OneHotEncoder Example--独热编码:")
     oneHotEncoderExample(movieSamples)
 
-    println("MultiHotEncoder Example:")
+    println("MultiHotEncoder Example--多热编码-电影分类:")
     multiHotEncoderExample(movieSamples)
 
-    println("Numerical features Example:")
+    println("Numerical features Example--数值型特征处理，归一化和分桶:")
     val ratingsResourcesPath = this.getClass.getResource("/webroot/sampledata/ratings.csv")
     val ratingSamples = spark.read.format("csv").option("header", "true").load(ratingsResourcesPath.getPath)
     ratingFeatures(ratingSamples)
-
   }
 }

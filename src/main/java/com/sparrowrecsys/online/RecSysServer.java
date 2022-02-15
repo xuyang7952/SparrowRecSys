@@ -16,14 +16,16 @@ import java.net.URL;
  */
 
 public class RecSysServer {
-
+    //主函数，创建推荐服务器并运行
     public static void main(String[] args) throws Exception {
         new RecSysServer().run();
     }
 
     //recsys server port number
+    //推荐服务器的默认服务端口6010
     private static final int DEFAULT_PORT = 6010;
 
+    //运行推荐服务器的函数
     public void run() throws Exception{
 
         int port = DEFAULT_PORT;
@@ -32,7 +34,9 @@ public class RecSysServer {
         } catch (NumberFormatException ignored) {}
 
         //set ip and port number
+        //绑定IP地址和端口，0.0.0.0代表本地运行
         InetSocketAddress inetAddress = new InetSocketAddress("0.0.0.0", port);
+        //创建Jetty服务器
         Server server = new Server(inetAddress);
 
         //get index.html path
@@ -54,6 +58,7 @@ public class RecSysServer {
                 "i2vEmb", "uEmb");
 
         //create server context
+        //创建Jetty服务器的环境handler
         ServletContextHandler context = new ServletContextHandler();
         context.setContextPath("/");
         context.setBaseResource(Resource.newResource(webRootUri));
@@ -62,10 +67,15 @@ public class RecSysServer {
 
         //bind services with different servlets
         context.addServlet(DefaultServlet.class,"/");
+        //添加API，getMovie，获取电影相关数据
         context.addServlet(new ServletHolder(new MovieService()), "/getmovie");
+        //添加API，getuser，获取用户相关数据
         context.addServlet(new ServletHolder(new UserService()), "/getuser");
+        //添加API，getsimilarmovie，获取相似电影推荐
         context.addServlet(new ServletHolder(new SimilarMovieService()), "/getsimilarmovie");
+        //添加API，getrecommendation，获取各类电影推荐
         context.addServlet(new ServletHolder(new RecommendationService()), "/getrecommendation");
+        //添加API，getrecforyou，为你推荐
         context.addServlet(new ServletHolder(new RecForYouService()), "/getrecforyou");
 
         //set url handler
@@ -73,6 +83,7 @@ public class RecSysServer {
         System.out.println("RecSys Server has started.");
 
         //start Server
+        //启动Jetty服务器
         server.start();
         server.join();
     }
