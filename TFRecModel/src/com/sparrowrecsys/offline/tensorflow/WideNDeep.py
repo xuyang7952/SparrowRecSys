@@ -1,16 +1,11 @@
 import tensorflow as tf
 
-# Training samples path, change to your local path
-training_samples_file_path = tf.keras.utils.get_file("trainingSamples.csv",
-                                                     "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                     "/resources/webroot/sampledata/trainingSamples.csv")
-# Test samples path, change to your local path
-test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
-                                                 "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                 "/resources/webroot/sampledata/testSamples.csv")
+# 定义文件路径
+training_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\trainingSamples.csv"
+test_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\testSamples.csv"
 
 
-# load sample as tf dataset
+# load sample as tf datasetl
 def get_dataset(file_path):
     dataset = tf.data.experimental.make_csv_dataset(
         file_path,
@@ -42,7 +37,7 @@ GENRE_FEATURES = {
     'movieGenre3': genre_vocab
 }
 
-# all categorical features
+# all categorical features 类别特征处理,转为Embedding向量
 categorical_columns = []
 for feature, vocab in GENRE_FEATURES.items():
     cat_col = tf.feature_column.categorical_column_with_vocabulary_list(
@@ -59,7 +54,7 @@ user_col = tf.feature_column.categorical_column_with_identity(key='userId', num_
 user_emb_col = tf.feature_column.embedding_column(user_col, 10)
 categorical_columns.append(user_emb_col)
 
-# all numerical features
+# all numerical features---数值型特征
 numerical_columns = [tf.feature_column.numeric_column('releaseYear'),
                      tf.feature_column.numeric_column('movieRatingCount'),
                      tf.feature_column.numeric_column('movieAvgRating'),
@@ -68,7 +63,8 @@ numerical_columns = [tf.feature_column.numeric_column('releaseYear'),
                      tf.feature_column.numeric_column('userAvgRating'),
                      tf.feature_column.numeric_column('userRatingStddev')]
 
-# cross feature between current movie and user historical movie
+# cross feature between current movie and user historical movie，
+# 交叉特征，由“用户已好评电影”和“当前评价电影”组成的一个交叉特征，模型记住“一个喜欢电影 A 的用户，也会喜欢电影 B”这样的规则。
 rated_movie = tf.feature_column.categorical_column_with_identity(key='userRatedMovie1', num_buckets=1001)
 crossed_feature = tf.feature_column.indicator_column(tf.feature_column.crossed_column([movie_col, rated_movie], 10000))
 
@@ -97,13 +93,14 @@ inputs = {
 }
 
 # wide and deep model architecture
-# deep part for all input features
+# deep part for all input features deep部分
 deep = tf.keras.layers.DenseFeatures(numerical_columns + categorical_columns)(inputs)
 deep = tf.keras.layers.Dense(128, activation='relu')(deep)
 deep = tf.keras.layers.Dense(128, activation='relu')(deep)
-# wide part for cross feature
+# wide part for cross feature wide部分
 wide = tf.keras.layers.DenseFeatures(crossed_feature)(inputs)
 both = tf.keras.layers.concatenate([deep, wide])
+# 输出层
 output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(both)
 model = tf.keras.Model(inputs, output_layer)
 
