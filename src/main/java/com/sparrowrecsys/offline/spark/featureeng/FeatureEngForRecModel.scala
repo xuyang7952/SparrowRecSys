@@ -202,7 +202,7 @@ object FeatureEngForRecModel {
     //generate a smaller sample set for demo
     val smallSamples = samples.sample(0.1) //抽样
 
-    //split training and test set by 8:2
+    //split training and test set by 8:2，随机切分数据
     val Array(training, test) = smallSamples.randomSplit(Array(0.8, 0.2))
 
     val sampleResourcesPath = this.getClass.getResource(savePath)
@@ -212,13 +212,18 @@ object FeatureEngForRecModel {
       .csv(sampleResourcesPath + "/testSamples")
   }
 
+  /*
+  根据时间，分割样本
+   */
   def splitAndSaveTrainingTestSamplesByTimeStamp(samples: DataFrame, savePath: String) = {
     //generate a smaller sample set for demo
     val smallSamples = samples.sample(0.1).withColumn("timestampLong", col("timestamp").cast(LongType))
 
+    //找到时间切割点
     val quantile = smallSamples.stat.approxQuantile("timestampLong", Array(0.8), 0.05)
     val splitTimestamp = quantile.apply(0)
 
+    //切割样本为训练集和测试集
     val training = smallSamples.where(col("timestampLong") <= splitTimestamp).drop("timestampLong")
     val test = smallSamples.where(col("timestampLong") > splitTimestamp).drop("timestampLong")
 

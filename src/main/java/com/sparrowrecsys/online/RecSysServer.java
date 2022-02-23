@@ -86,5 +86,6 @@ public class RecSysServer {
         //启动Jetty服务器
         server.start();
         server.join();
+        
     }
 }

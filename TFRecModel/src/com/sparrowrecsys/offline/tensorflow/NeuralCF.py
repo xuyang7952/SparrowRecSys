@@ -1,13 +1,8 @@
 import tensorflow as tf
 
-# Training samples path, change to your local path
-training_samples_file_path = tf.keras.utils.get_file("trainingSamples.csv",
-                                                     "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                     "/resources/webroot/sampledata/trainingSamples.csv")
-# Test samples path, change to your local path
-test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
-                                                 "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                 "/resources/webroot/sampledata/testSamples.csv")
+# 定义文件路径
+training_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\trainingSamples.csv"
+test_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\testSamples.csv"
 
 
 # load sample as tf dataset
@@ -43,35 +38,47 @@ inputs = {
 
 # neural cf model arch two. only embedding in each tower, then MLP as the interaction layers
 def neural_cf_model_1(feature_inputs, item_feature_columns, user_feature_columns, hidden_units):
+    # 物品侧特征层
     item_tower = tf.keras.layers.DenseFeatures(item_feature_columns)(feature_inputs)
+    # 用户侧特征层
     user_tower = tf.keras.layers.DenseFeatures(user_feature_columns)(feature_inputs)
+    # 连接层及后续多层神经网络
     interact_layer = tf.keras.layers.concatenate([item_tower, user_tower])
     for num_nodes in hidden_units:
         interact_layer = tf.keras.layers.Dense(num_nodes, activation='relu')(interact_layer)
+    # sigmoid单神经元输出层
     output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(interact_layer)
+    # 定义keras模型
     neural_cf_model = tf.keras.Model(feature_inputs, output_layer)
     return neural_cf_model
 
 
 # neural cf model arch one. embedding+MLP in each tower, then dot product layer as the output
+# 把MLP放在用户塔、物品塔的内部，实现塔内部的特征充分交互
 def neural_cf_model_2(feature_inputs, item_feature_columns, user_feature_columns, hidden_units):
+    # 物品侧输入特征层
     item_tower = tf.keras.layers.DenseFeatures(item_feature_columns)(feature_inputs)
+    # 物品塔结构
     for num_nodes in hidden_units:
         item_tower = tf.keras.layers.Dense(num_nodes, activation='relu')(item_tower)
 
+    # 用户侧输入特征层
     user_tower = tf.keras.layers.DenseFeatures(user_feature_columns)(feature_inputs)
+    # 用户塔结构
     for num_nodes in hidden_units:
         user_tower = tf.keras.layers.Dense(num_nodes, activation='relu')(user_tower)
 
     output = tf.keras.layers.Dot(axes=1)([item_tower, user_tower])
+    # 使用内积操作交互物品塔和用户塔，产生最后输出
     output = tf.keras.layers.Dense(1, activation='sigmoid')(output)
-
+    # 定义keras模型
     neural_cf_model = tf.keras.Model(feature_inputs, output)
     return neural_cf_model
 
 
 # neural cf model architecture
-model = neural_cf_model_1(inputs, [movie_emb_col], [user_emb_col], [10, 10])
+# model = neural_cf_model_1(inputs, [movie_emb_col], [user_emb_col], [10, 10])
+model = neural_cf_model_2(inputs, [movie_emb_col], [user_emb_col], [10, 10])
 
 # compile the model, set loss function, optimizer and evaluation metrics
 model.compile(
@@ -94,9 +101,10 @@ for prediction, goodRating in zip(predictions[:12], list(test_dataset)[0][1][:12
           " | Actual rating label: ",
           ("Good Rating" if bool(goodRating) else "Bad Rating"))
 
+model_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\neuralcf\003"
 tf.keras.models.save_model(
     model,
-    "file:///Users/zhewang/Workspace/SparrowRecSys/src/main/resources/webroot/modeldata/neuralcf/002",
+    model_file_path,
     overwrite=True,
     include_optimizer=True,
     save_format=None,

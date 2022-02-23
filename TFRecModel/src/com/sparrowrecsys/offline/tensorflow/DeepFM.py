@@ -1,13 +1,8 @@
 import tensorflow as tf
 
-# Training samples path, change to your local path
-training_samples_file_path = tf.keras.utils.get_file("trainingSamples.csv",
-                                                     "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                     "/resources/webroot/sampledata/trainingSamples.csv")
-# Test samples path, change to your local path
-test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
-                                                 "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                 "/resources/webroot/sampledata/testSamples.csv")
+# 定义文件路径
+training_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\trainingSamples.csv"
+test_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\testSamples.csv"
 
 
 # load sample as tf dataset
@@ -26,7 +21,7 @@ def get_dataset(file_path):
 train_dataset = get_dataset(training_samples_file_path)
 test_dataset = get_dataset(test_samples_file_path)
 
-# define input for keras model
+# define input for keras model--输入结构
 inputs = {
     'movieAvgRating': tf.keras.layers.Input(name='movieAvgRating', shape=(), dtype='float32'),
     'movieRatingStddev': tf.keras.layers.Input(name='movieRatingStddev', shape=(), dtype='float32'),
@@ -50,21 +45,21 @@ inputs = {
     'movieGenre3': tf.keras.layers.Input(name='movieGenre3', shape=(), dtype='string'),
 }
 
-# movie id embedding feature
+# movie id embedding feature--电影idEmbedding
 movie_col = tf.feature_column.categorical_column_with_identity(key='movieId', num_buckets=1001)
 movie_emb_col = tf.feature_column.embedding_column(movie_col, 10)
 movie_ind_col = tf.feature_column.indicator_column(movie_col) # movid id indicator columns
 
-# user id embedding feature
+# user id embedding feature--用户idEmbedding
 user_col = tf.feature_column.categorical_column_with_identity(key='userId', num_buckets=30001)
 user_emb_col = tf.feature_column.embedding_column(user_col, 10)
 user_ind_col = tf.feature_column.indicator_column(user_col) # user id indicator columns
 
-# genre features vocabulary
+# genre features vocabulary--电影风格Embedding
 genre_vocab = ['Film-Noir', 'Action', 'Adventure', 'Horror', 'Romance', 'War', 'Comedy', 'Western', 'Documentary',
                'Sci-Fi', 'Drama', 'Thriller',
                'Crime', 'Fantasy', 'Animation', 'IMAX', 'Mystery', 'Children', 'Musical']
-# user genre embedding feature
+# user genre embedding feature--用户喜欢电影风格Embedding
 user_genre_col = tf.feature_column.categorical_column_with_vocabulary_list(key="userGenre1",
                                                                            vocabulary_list=genre_vocab)
 user_genre_emb_col = tf.feature_column.embedding_column(user_genre_col, 10)
@@ -93,21 +88,21 @@ user_emb_layer = tf.keras.layers.DenseFeatures([user_emb_col])(inputs)
 item_genre_emb_layer = tf.keras.layers.DenseFeatures([item_genre_emb_col])(inputs)
 user_genre_emb_layer = tf.keras.layers.DenseFeatures([user_genre_emb_col])(inputs)
 
-# The first-order term in the FM layer
+# The first-order term in the FM layer--FM第一层
 fm_first_order_layer = tf.keras.layers.DenseFeatures(fm_first_order_columns)(inputs)
 
-# FM part, cross different categorical feature embeddings
+# FM part, cross different categorical feature embeddings--FM部分
 product_layer_item_user = tf.keras.layers.Dot(axes=1)([item_emb_layer, user_emb_layer])
 product_layer_item_genre_user_genre = tf.keras.layers.Dot(axes=1)([item_genre_emb_layer, user_genre_emb_layer])
 product_layer_item_genre_user = tf.keras.layers.Dot(axes=1)([item_genre_emb_layer, user_emb_layer])
 product_layer_user_genre_item = tf.keras.layers.Dot(axes=1)([item_emb_layer, user_genre_emb_layer])
 
-# deep part, MLP to generalize all input features
+# deep part, MLP to generalize all input features--deep部分
 deep = tf.keras.layers.DenseFeatures(deep_feature_columns)(inputs)
 deep = tf.keras.layers.Dense(64, activation='relu')(deep)
 deep = tf.keras.layers.Dense(64, activation='relu')(deep)
 
-# concatenate fm part and deep part
+# concatenate fm part and deep part--连接在一起
 concat_layer = tf.keras.layers.concatenate([fm_first_order_layer, product_layer_item_user, product_layer_item_genre_user_genre,
                                             product_layer_item_genre_user, product_layer_user_genre_item, deep], axis=1)
 output_layer = tf.keras.layers.Dense(1, activation='sigmoid')(concat_layer)

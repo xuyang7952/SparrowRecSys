@@ -7,14 +7,9 @@ Diff with DeepFM:
 """
 
 
-# Training samples path, change to your local path
-training_samples_file_path = tf.keras.utils.get_file("trainingSamples.csv",
-                                                     "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                     "/resources/webroot/sampledata/trainingSamples.csv")
-# Test samples path, change to your local path
-test_samples_file_path = tf.keras.utils.get_file("testSamples.csv",
-                                                 "file:///Users/zhewang/Workspace/SparrowRecSys/src/main"
-                                                 "/resources/webroot/sampledata/testSamples.csv")
+# 定义文件路径
+training_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\trainingSamples.csv"
+test_samples_file_path = r"E:\xn_work\xuyang\SparrowRecSys\src\main\resources\webroot\sampledata\testSamples.csv"
 
 
 # load sample as tf dataset
