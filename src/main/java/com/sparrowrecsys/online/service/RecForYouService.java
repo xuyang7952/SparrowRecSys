@@ -34,6 +34,7 @@ public class RecForYouService extends HttpServlet {
             //ranking algorithm
             String model = request.getParameter("model");
 
+            //实现A/B实验
             if (Config.IS_ENABLE_AB_TEST){
                 model = ABTest.getConfigByUserId(userId);
             }

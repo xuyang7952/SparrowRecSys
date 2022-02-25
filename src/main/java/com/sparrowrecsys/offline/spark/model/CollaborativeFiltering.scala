@@ -26,7 +26,7 @@ object CollaborativeFiltering {
 
     val Array(training, test) = ratingSamples.randomSplit(Array(0.8, 0.2))
 
-    // Build the recommendation model using ALS on the training data
+    // Build the recommendation model using ALS on the training data--协同过滤模型
     val als = new ALS()
       .setMaxIter(5)
       .setRegParam(0.01)
@@ -73,11 +73,11 @@ object CollaborativeFiltering {
       .build()
 
     val cv = new CrossValidator()
-      .setEstimator(als)
-      .setEvaluator(evaluator)
+      .setEstimator(als)  // setEstimator，这是我们要评估的对象，
+      .setEvaluator(evaluator) //来设置评估所用的方法和指标
       .setEstimatorParamMaps(paramGrid)
       .setNumFolds(10)  // Use 3+ in practice
-    val cvModel = cv.fit(test)
+    val cvModel = cv.fit(test) // 交叉检验中 k 的值，
     val avgMetrics = cvModel.avgMetrics
 
     spark.stop()
