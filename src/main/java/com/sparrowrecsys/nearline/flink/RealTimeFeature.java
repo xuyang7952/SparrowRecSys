@@ -27,6 +27,9 @@ class Rating{
     }
 }
 
+/*
+    Flink实践
+ */
 public class RealTimeFeature {
 
     public void test() throws Exception {
@@ -40,6 +43,7 @@ public class RealTimeFeature {
         TextInputFormat format = new TextInputFormat(
                 new org.apache.flink.core.fs.Path(ratingResourcesPath.getPath()));
 
+        //定义数据流
         DataStream<String> inputStream = env.readFile(
                 format,
                 ratingResourcesPath.getPath(),
@@ -49,8 +53,8 @@ public class RealTimeFeature {
         DataStream<Rating> ratingStream = inputStream.map(Rating::new);
 
         ratingStream.keyBy(rating -> rating.userId)
-                .timeWindow(Time.seconds(1))
-                .reduce(
+                .timeWindow(Time.seconds(1)) // 定义时间窗口
+                .reduce(    //定义相关操作
                         (ReduceFunction<Rating>) (rating, t1) -> {
                             if (rating.timestamp.compareTo(t1.timestamp) > 0){
                                 return rating;
