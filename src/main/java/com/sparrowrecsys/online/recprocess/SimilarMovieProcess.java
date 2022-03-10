@@ -54,7 +54,7 @@ public class SimilarMovieProcess {
     }
 
     /**
-     * multiple-retrieval candidate generation method 多路召回
+     * multiple-retrieval candidate generation method 多路召回:风格相符/最高/最新
      * @param movie input movie object
      * @return movie candidates
      */
